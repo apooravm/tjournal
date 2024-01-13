@@ -3,12 +3,37 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type ConfigOptions struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+const (
+	configFile = "./tjournal.config.json"
+)
+
+func checkConfigExists() (bool, error) {
+	if _, err := os.Stat(configFile); err == nil {
+		return true, nil
+	} else {
+		if os.IsNotExist(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+}
+
 func main() {
+
+	return
+
 	p := tea.NewProgram(initialModel())
 
 	if _, err := p.Run(); err != nil {
