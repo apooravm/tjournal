@@ -22,4 +22,5 @@ MarkdownNote.md
 go.work
 
 # Custom
-bin/
+bin/*
+*.json
