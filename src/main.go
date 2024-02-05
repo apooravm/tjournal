@@ -136,12 +136,28 @@ func main() {
 
 	localConfig = configReadingBusiness()
 
-	// if len(os.Args) == 1 {
-	// 	fmt.Println("tjournal.exe <your_log>")
-	// 	return
+	// logs := *ReadJournalLogs()
+	// for _, log := range logs {
+	// 	fmt.Println("Created At:", log.Created_at)
+	// 	fmt.Println("Title:", log.Title)
+	// 	fmt.Println("Log:", log.Log)
+	// 	fmt.Println("Tags:", log.Tags)
+	// 	fmt.Println("Log ID:", log.Log_Id)
+	// 	fmt.Println("")
 	// }
-	// logMessage := strings.Join(os.Args[1:], " ")
 
+	DeleteJournalLog(46)
+
+	// var newLog JournalLogRes
+	// if len(logs) > 0 {
+	// 	newLog = logs[0]
+	// 	newLog.Title = "Updated Title"
+	// 	UpdateJournalLog(&newLog)
+	// }
+
+}
+
+func WriteJournalLog() {
 	var log string
 	var title string
 	var tags_str string
@@ -170,6 +186,56 @@ func main() {
 	// fmt.Println("TITLE:", title)
 	// fmt.Println("TAGS:", tags)
 	CreateJournalLog(log, title, &tags)
+}
+
+type UserAuth struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type JournalLogRes struct {
+	Created_at string   `json:"created_at"`
+	Log        string   `json:"log_message"`
+	Title      string   `json:"title"`
+	Tags       []string `json:"tags"`
+	Log_Id     int      `json:"log_id"`
+}
+
+func ReadJournalLogs() *[]JournalLogRes {
+	payload, err := json.Marshal(UserAuth{
+		Username: localConfig.Username,
+		Password: localConfig.Password,
+	})
+	if err != nil {
+		fmt.Println("Error marshalling")
+		return nil
+	}
+
+	req, err := http.NewRequest("GET", URL, bytes.NewBuffer(payload))
+	if err != nil {
+		fmt.Println("Error creating request")
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request")
+		return nil
+	}
+
+	defer res.Body.Close()
+
+	var journalLogs []JournalLogRes
+
+	if err := json.NewDecoder(res.Body).Decode(&journalLogs); err != nil {
+		fmt.Println("Error Unmarshallng data")
+		return nil
+	}
+
+	return &journalLogs
 }
 
 type CreateJournalLogReq struct {
@@ -213,5 +279,98 @@ func CreateJournalLog(log string, title string, tags *[]string) {
 		fmt.Println("Log created!", res.Status)
 	} else {
 		fmt.Println("Something went wrong.", res.Status)
+	}
+}
+
+type UpdateLogReq struct {
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	Log      string   `json:"log"`
+	Tags     []string `json:"tags"`
+	Title    string   `json:"title"`
+	Log_Id   int      `json:"log_id"`
+}
+
+// Create a copy of the original log obj and edit that itself. This becomes the new log
+func UpdateJournalLog(prevLog *JournalLogRes) {
+	payload, err := json.Marshal(UpdateLogReq{
+		Username: localConfig.Username,
+		Password: localConfig.Password,
+		Log:      prevLog.Log,
+		Tags:     prevLog.Tags,
+		Title:    prevLog.Title,
+		Log_Id:   prevLog.Log_Id,
+	})
+	if err != nil {
+		fmt.Println("Error marshalling payload")
+		return
+	}
+
+	req, err := http.NewRequest("PUT", URL, bytes.NewBuffer(payload))
+	if err != nil {
+		fmt.Println("Error creating request")
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request")
+		return
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode >= 200 && res.StatusCode < 300 {
+		fmt.Println("Updated Successfully")
+		return
+	} else {
+		fmt.Println("Something went wrong")
+		return
+	}
+}
+
+type DeleteJournalLogReq struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Log_Id   int    `json:"log_id"`
+}
+
+func DeleteJournalLog(log_id int) {
+	payload, err := json.Marshal(DeleteJournalLogReq{
+		Username: localConfig.Username,
+		Password: localConfig.Password,
+		Log_Id:   log_id,
+	})
+	if err != nil {
+		fmt.Println("Error marshalling payload")
+		return
+	}
+
+	req, err := http.NewRequest("DELETE", URL, bytes.NewBuffer(payload))
+	if err != nil {
+		fmt.Println("Error creating request")
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request")
+		return
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode >= 200 && res.StatusCode < 300 {
+		fmt.Println("Deleted Successfully")
+		return
+	} else {
+		fmt.Println("Something went wrong", res.Status)
+		return
 	}
 }
