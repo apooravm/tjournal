@@ -1,112 +1,56 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	api "github.com/apooravm/tjournal/src/api"
+	configMng "github.com/apooravm/tjournal/src/config"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	configJsonPath = "./tjournalConfig.json"
-	localConfig    *LocalConfig
+	err            error
+	config         *configMng.LocalConfig
+	configName     = "tjournalConfig.json"
+	configJsonPath string
 	URL            = "https://multi-serve.onrender.com/api/journal/"
 )
 
-type LocalConfig struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-func configFileExists() bool {
-	if _, err := os.Stat(configJsonPath); os.IsNotExist(err) {
-		return false
-	}
-	return true
-}
-
-func createConfigFile(username string, password string) error {
-	configInit := LocalConfig{
-		Username: username,
-		Password: password,
-	}
-
-	file, err := os.Create(configJsonPath)
+func main() {
+	exePath, err := os.Executable()
 	if err != nil {
-		return err
+		fmt.Println("Error locating exec file")
+		return
 	}
+	exeDir := filepath.Dir(exePath)
+	configJsonPath = filepath.Join(exeDir, configName)
 
-	jsonData, err := json.MarshalIndent(&configInit, "", "    ")
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	_, err = file.Write(jsonData)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func readConfig() (*LocalConfig, error) {
-	var localConfig LocalConfig
-
-	file, err := os.Open(configJsonPath)
-	if err != nil {
-		return &localConfig, err
-	}
-
-	defer file.Close()
-
-	if err = json.NewDecoder(file).Decode(&localConfig); err != nil {
-		return &localConfig, err
-	}
-
-	return &localConfig, err
-
-}
-
-func configReadingBusiness() *LocalConfig {
-	var localConfig *LocalConfig
-	if configFileExists() {
-		localConfig, err := readConfig()
+	if configMng.ConfigFileExists(configJsonPath) {
+		config, err = configMng.ReadConfig(configJsonPath)
 		if err != nil {
 			fmt.Println("Error reading config file...")
-			return localConfig
+			return
 		}
-		return localConfig
 
 	} else {
-		fmt.Println("No config file found. Creating one...")
-		var username string
-		var pass string
-
-		fmt.Println("Enter your registered username: ")
-		fmt.Scanln(&username)
-
-		fmt.Println("Enter your registered password: ")
-		fmt.Scanln(&pass)
-
-		if err := createConfigFile(username, pass); err != nil {
-			fmt.Println("Error Creating config file. ", err.Error())
-			return localConfig
+		username, password := configMng.ScanUsernamePassword()
+		if err := configMng.CreateConfigFile(configJsonPath, username, password); err != nil {
+			fmt.Println("Error creating config...")
+			return
 		}
-		fmt.Println("Config file has been created!")
 
-		localConfig, err := readConfig()
+		config, err = configMng.ReadConfig(configJsonPath)
 		if err != nil {
 			fmt.Println("Error reading config file...")
-			return localConfig
+			return
 		}
-
-		return localConfig
 	}
+	journalManage := api.JournalDB{Url: URL, Username: config.Username, Password: config.Password}
+	fmt.Println(journalManage)
 }
 
 var docStyle = lipgloss.NewStyle().Margin(1, 4)
@@ -147,7 +91,7 @@ func (m model) View() string {
 	return docStyle.Render(m.list.View())
 }
 
-func main() {
+func main_listitem() {
 	items := []list.Item{
 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
