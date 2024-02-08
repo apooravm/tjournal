@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -8,6 +9,105 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+var (
+	configJsonPath = "./tjournalConfig.json"
+	localConfig    *LocalConfig
+	URL            = "https://multi-serve.onrender.com/api/journal/"
+)
+
+type LocalConfig struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func configFileExists() bool {
+	if _, err := os.Stat(configJsonPath); os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
+func createConfigFile(username string, password string) error {
+	configInit := LocalConfig{
+		Username: username,
+		Password: password,
+	}
+
+	file, err := os.Create(configJsonPath)
+	if err != nil {
+		return err
+	}
+
+	jsonData, err := json.MarshalIndent(&configInit, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	_, err = file.Write(jsonData)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func readConfig() (*LocalConfig, error) {
+	var localConfig LocalConfig
+
+	file, err := os.Open(configJsonPath)
+	if err != nil {
+		return &localConfig, err
+	}
+
+	defer file.Close()
+
+	if err = json.NewDecoder(file).Decode(&localConfig); err != nil {
+		return &localConfig, err
+	}
+
+	return &localConfig, err
+
+}
+
+func configReadingBusiness() *LocalConfig {
+	var localConfig *LocalConfig
+	if configFileExists() {
+		localConfig, err := readConfig()
+		if err != nil {
+			fmt.Println("Error reading config file...")
+			return localConfig
+		}
+		return localConfig
+
+	} else {
+		fmt.Println("No config file found. Creating one...")
+		var username string
+		var pass string
+
+		fmt.Println("Enter your registered username: ")
+		fmt.Scanln(&username)
+
+		fmt.Println("Enter your registered password: ")
+		fmt.Scanln(&pass)
+
+		if err := createConfigFile(username, pass); err != nil {
+			fmt.Println("Error Creating config file. ", err.Error())
+			return localConfig
+		}
+		fmt.Println("Config file has been created!")
+
+		localConfig, err := readConfig()
+		if err != nil {
+			fmt.Println("Error reading config file...")
+			return localConfig
+		}
+
+		return localConfig
+	}
+}
 
 var docStyle = lipgloss.NewStyle().Margin(1, 4)
 
