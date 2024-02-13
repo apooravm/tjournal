@@ -7,6 +7,10 @@ import (
 	"net/http"
 )
 
+const (
+	pingURL = "https://multi-serve.onrender.com/api/cronping"
+)
+
 type LogReqPayload struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -17,6 +21,28 @@ type JournalDB struct {
 	Url      string
 	Username string
 	Password string
+}
+
+func (journal *JournalDB) CheckServerStatus() (*JournalMessage, error) {
+	req, err := http.NewRequest("GET", pingURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode >= 200 && res.StatusCode < 300 {
+		return &JournalMessage{Message: "Server Online", Code: res.StatusCode, Simple: "good"}, nil
+
+	} else {
+		return &JournalMessage{Message: "Server Offline", Code: res.StatusCode, Simple: "bad"}, nil
+	}
 }
 
 func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {

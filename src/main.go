@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
 	api "github.com/apooravm/tjournal/src/api"
 	configMng "github.com/apooravm/tjournal/src/config"
-	"github.com/charmbracelet/bubbles/list"
+
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -19,6 +21,20 @@ var (
 	configJsonPath string
 	URL            = "https://multi-serve.onrender.com/api/journal/"
 )
+
+var docStyle = lipgloss.NewStyle().Margin(1, 4)
+
+var (
+	journalManage api.JournalDB
+)
+
+type item struct {
+	title, description string
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.description + "\n4th july 2011" }
+func (i item) FilterValue() string { return i.title }
 
 func main() {
 	exePath, err := os.Executable()
@@ -49,26 +65,64 @@ func main() {
 			return
 		}
 	}
-	journalManage := api.JournalDB{Url: URL, Username: config.Username, Password: config.Password}
-	fmt.Println(journalManage)
+	journalManage = api.JournalDB{Url: URL, Username: config.Username, Password: config.Password}
+
+	p := tea.NewProgram(initialModel())
+	if _, err := p.Run(); err != nil {
+		log.Fatal(err)
+		return
+	}
 }
 
-var docStyle = lipgloss.NewStyle().Margin(1, 4)
-
-type item struct {
-	title, description string
-}
-
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.description + "\n4th july 2011" }
-func (i item) FilterValue() string { return i.title }
-
-type model struct {
-	list list.Model
+func initialModel() model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	return model{spinner: s}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return func() tea.Msg {
+		return tea.Batch(m.spinner.Tick, GetData)
+	}
+}
+
+func GetData() tea.Msg {
+	// status, err := journalManage.CheckServerStatus()
+	// if err != nil {
+	// 	fmt.Println("Error checking status", err.Error())
+	// 	return JournError{Code: 400, Message: "Error connecting to the server"}
+	// }
+
+	// if status.Simple == "bad" {
+	// 	return JournError{Code: 500, Message: "Server Offline"}
+	// }
+
+	logs, err := journalManage.ReadJournalLogs()
+	if err != nil {
+		fmt.Println("Something went wrong", err.Error())
+		return JournError{Code: 400, Message: "Error connecting to the server"}
+	}
+
+	return logs
+}
+
+type JournError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e JournError) Error() string {
+	return fmt.Sprintf("Error %d: %s", e.Code, e.Message)
+}
+
+type model struct {
+	statusCode int
+	spinner    spinner.Model
+	quitting   bool
+	// list       list.Model
+
+	err error
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -77,37 +131,58 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+	// case tea.WindowSizeMsg:
+	// 	h, v := docStyle.GetFrameSize()
+	// 	m.list.SetSize(msg.Width-h, msg.Height-v)
+
+	case JournError:
+		m.err = msg
+
+	case *[]api.ReadJournalLogRes:
+		m.statusCode = 200
+
+	default:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	// m.list, cmd = m.list.Update(msg)
 	return m, cmd
 }
 
 func (m model) View() string {
-	return docStyle.Render(m.list.View())
-}
-
-func main_listitem() {
-	items := []list.Item{
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
-		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+	if m.err != nil {
+		return m.err.Error()
 	}
 
-	m := model{list: list.New(items, list.NewDefaultDelegate(), 0, 0)}
-	m.list.Title = "My Fave Things"
+	s := fmt.Sprintf("\n\n Loading %s\n", m.spinner.View())
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		fmt.Println("Error running program:", err)
-		os.Exit(1)
+	if m.statusCode > 0 {
+		s = "got"
 	}
+	return s
 }
+
+// func main_listitem() {
+// 	items := []list.Item{
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 		item{title: "Raspberry Pi’s", description: "I have ’em all over my house"},
+// 	}
+
+// 	m := model{list: list.New(items, list.NewDefaultDelegate(), 0, 0)}
+// 	m.list.Title = "My Fave Things"
+
+// 	p := tea.NewProgram(m, tea.WithAltScreen())
+
+// 	if _, err := p.Run(); err != nil {
+// 		fmt.Println("Error running program:", err)
+// 		os.Exit(1)
+// 	}
+// }
