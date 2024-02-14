@@ -7,6 +7,16 @@ import (
 	"net/http"
 )
 
+type JournError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Simple  string `json:"simple"`
+}
+
+func (e JournError) Error() string {
+	return fmt.Sprintf("Error %d: %s; %s", e.Code, e.Simple, e.Message)
+}
+
 const (
 	pingURL = "https://multi-serve.onrender.com/api/cronping"
 )
@@ -51,14 +61,20 @@ func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 		Password: journal.Password,
 	})
 	if err != nil {
-		fmt.Println("Error marshalling")
-		return nil, err
+		return nil, JournError{
+			Code:    400,
+			Message: err.Error(),
+			Simple:  "Error Marshalling",
+		}
 	}
 
 	req, err := http.NewRequest("GET", journal.Url, bytes.NewBuffer(payload))
 	if err != nil {
-		fmt.Println("Error creating request")
-		return nil, err
+		return nil, JournError{
+			Code:    400,
+			Message: err.Error(),
+			Simple:  "Error Marshalling",
+		}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -66,20 +82,53 @@ func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request")
-		return nil, err
+		return nil, JournError{
+			Code:    400,
+			Message: err.Error(),
+			Simple:  "Error sending request",
+		}
 	}
 
 	defer res.Body.Close()
 
-	var journalLogs []ReadJournalLogRes
+	switch {
+	case res.StatusCode >= 200 && res.StatusCode < 300:
+		// Success
+		var journalLogs []ReadJournalLogRes
 
-	if err := json.NewDecoder(res.Body).Decode(&journalLogs); err != nil {
-		fmt.Println("Error Unmarshallng data")
-		return nil, err
+		if err := json.NewDecoder(res.Body).Decode(&journalLogs); err != nil {
+			return nil, JournError{
+				Code:    400,
+				Message: err.Error(),
+				Simple:  "Error Unmarshallng data",
+			}
+		}
+
+		return &journalLogs, nil
+
+	case res.StatusCode >= 400 && res.StatusCode < 500:
+		// Client Error
+		return nil, JournError{
+			Code:    400,
+			Message: res.Status,
+			Simple:  "Client error",
+		}
+
+	case res.StatusCode >= 500 && res.StatusCode < 600:
+		// Server Error
+		return nil, JournError{
+			Code:    500,
+			Message: res.Status,
+			Simple:  "Server error",
+		}
+
+	default:
+		return nil, JournError{
+			Code:    0,
+			Message: res.Status,
+			Simple:  "Something went wrong. Idk",
+		}
 	}
-
-	return &journalLogs, nil
 }
 
 func (journal *JournalDB) CreateJournalLog(log string, title string, tags *[]string) (*JournalMessage, error) {
