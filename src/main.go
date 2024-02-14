@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	err            error
 	config         *configMng.LocalConfig
 	configName     = "tjournalConfig.json"
 	configJsonPath string
@@ -33,14 +32,22 @@ type item struct {
 	title, desc string
 }
 
+type JournMessage tea.Msg
+
 func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.desc }
 func (i item) FilterValue() string { return i.title }
 
+func timeStrParser(timestr string) string {
+	// 2024-02-04T16:17:54.361333+00:00
+	y, m, d, time := timestr[0:4], timestr[5:7], timestr[8:10], timestr[11:16]
+	return fmt.Sprintf("\n%s, %s-%s-%s", time, d, m, y)
+}
+
 func getItemList(logs *[]api.ReadJournalLogRes) *[]list.Item {
 	var items []list.Item
 	for _, log := range *logs {
-		items = append(items, item{title: log.Title, desc: log.Log})
+		items = append(items, item{title: log.Title + timeStrParser(log.Created_at), desc: log.Log})
 	}
 	return &items
 }
@@ -66,24 +73,31 @@ func GetData() tea.Msg {
 type model struct {
 	statusCode int
 	logs       *[]api.ReadJournalLogRes
-
-	spinner  spinner.Model
-	quitting bool
-
-	list list.Model
+	list       list.Model
 
 	err error
 }
 
 func initialModel() model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	return model{spinner: s}
+	var items []list.Item
+
+	del := list.NewDefaultDelegate()
+	del.SetHeight(4)
+	del.SetSpacing(1)
+
+	logList := list.New(items, del, 0, 0)
+
+	m := model{list: logList}
+	m.list.Title = "Journal Logs"
+	m.list.SetSpinner(spinner.Line)
+	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, GetData)
+	return tea.Batch(GetData, func() tea.Msg {
+		var msg JournMessage = "startspinner"
+		return msg
+	})
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -91,12 +105,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
-		} else {
-			return m, nil
 		}
-	// case tea.WindowSizeMsg:
-	// 	h, v := docStyle.GetFrameSize()
-	// 	m.list.SetSize(msg.Width-h, msg.Height-v)
 
 	case api.JournError:
 		m.err = msg
@@ -105,31 +114,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *[]api.ReadJournalLogRes:
 		m.statusCode = 200
 		m.logs = msg
-		m.list = list.New(*getItemList(m.logs), list.NewDefaultDelegate(), 0, 0)
-		m.list.Title = "Journal Logs"
-
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
-		return m, cmd
+		m.list.StopSpinner()
+		return m, m.list.SetItems(*getItemList(m.logs))
+		// return m, m.list.StartSpinner()
 
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		if m.statusCode > 0 {
-			m.list.SetSize(msg.Width-h, msg.Height-v)
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+
+	case JournMessage:
+		if msg == "startspinner" {
+			return m, m.list.StartSpinner()
 		}
 	}
 
-	if m.statusCode > 0 {
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
-		return m, cmd
-
-	} else {
-		// if data not fetched keep spinning
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
+	var listCmd tea.Cmd
+	m.list, listCmd = m.list.Update(msg)
+	return m, listCmd
 }
 
 func (m model) View() string {
@@ -137,13 +138,7 @@ func (m model) View() string {
 		return m.err.Error()
 	}
 
-	s := fmt.Sprintf("\n\n Loading %s\n\n", m.spinner.View())
-
-	if m.statusCode > 0 {
-		// s = fmt.Sprintf("\n\n %v \n\n", m.logs)
-		s = docStyle.Render(m.list.View())
-	}
-	return s
+	return docStyle.Render(m.list.View())
 }
 
 func main() {
