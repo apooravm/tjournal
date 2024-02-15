@@ -62,6 +62,14 @@ func ReadConfig(configpath string) (*LocalConfig, error) {
 	return &localConfig, err
 }
 
+func DeleteConfigFile(configpath string) error {
+	if err := os.Remove(configpath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Returns scanned username, password
 func ScanUsernamePassword() (string, string) {
 	var username string
@@ -73,7 +81,7 @@ func ScanUsernamePassword() (string, string) {
 		username = scanner.Text()
 	}
 
-	fmt.Println("Enter your registered username: ")
+	fmt.Println("Enter password: ")
 	scanner = bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		pass = scanner.Text()

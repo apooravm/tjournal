@@ -5,10 +5,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	api "github.com/apooravm/tjournal/src/api"
 	configMng "github.com/apooravm/tjournal/src/config"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,13 +43,13 @@ func (i item) FilterValue() string { return i.title }
 func timeStrParser(timestr string) string {
 	// 2024-02-04T16:17:54.361333+00:00
 	y, m, d, time := timestr[0:4], timestr[5:7], timestr[8:10], timestr[11:16]
-	return fmt.Sprintf("\n%s, %s-%s-%s", time, d, m, y)
+	return fmt.Sprintf("\n\n%s, %s-%s-%s", time, d, m, y)
 }
 
 func getItemList(logs *[]api.ReadJournalLogRes) *[]list.Item {
 	var items []list.Item
 	for _, log := range *logs {
-		items = append(items, item{title: log.Title + timeStrParser(log.Created_at), desc: log.Log})
+		items = append(items, item{title: log.Title, desc: log.Log + timeStrParser(log.Created_at)})
 	}
 	return &items
 }
@@ -75,21 +77,32 @@ type model struct {
 	logs       *[]api.ReadJournalLogRes
 	list       list.Model
 
-	err error
+	filterAgainst string
+
+	inputStyle lipgloss.Style
+
+	quitting bool
+	err      error
 }
 
 func initialModel() model {
 	var items []list.Item
 
 	del := list.NewDefaultDelegate()
-	del.SetHeight(4)
-	del.SetSpacing(1)
+	del.ShowDescription = true
+	del.SetHeight(5)
+	// del.SetSpacing(1)
 
 	logList := list.New(items, del, 0, 0)
 
 	m := model{list: logList}
 	m.list.Title = "Journal Logs"
 	m.list.SetSpinner(spinner.Line)
+
+	// m.list.SetShowHelp(false)
+	m.filterAgainst = "title"
+
+	m.inputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7"))
 	return m
 }
 
@@ -104,6 +117,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			m.quitting = true
 			return m, tea.Quit
 		}
 
@@ -115,12 +129,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusCode = 200
 		m.logs = msg
 		m.list.StopSpinner()
+
+		newKeyBindings := []key.Binding{key.NewBinding(key.WithKeys("N"), key.WithHelp("N", "New log"))}
+
+		m.list.AdditionalShortHelpKeys = func() []key.Binding {
+			return newKeyBindings
+		}
+
 		return m, m.list.SetItems(*getItemList(m.logs))
 		// return m, m.list.StartSpinner()
 
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
 		m.list.SetSize(msg.Width-h, msg.Height-v)
+
+		// Helper display
+		// m.help.Width = msg.Width
 
 	case JournMessage:
 		if msg == "startspinner" {
@@ -134,11 +158,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	question := lipgloss.NewStyle().Width(50).Align(lipgloss.Center).Render("Are you sure you want to eat marmalade?")
+
 	if m.err != nil {
 		return m.err.Error()
 	}
 
-	return docStyle.Render(m.list.View())
+	if m.quitting {
+		return "Bye!\n"
+	}
+
+	return docStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, m.list.View(), question))
+}
+
+func handleCLIArg(cliArg string) {
+	switch cliArg {
+	case "help":
+		fmt.Println("Usage: `tjournal.exe [ARG]` if arg needed\n\nAvailable Args\nhelp   - Display help\ndelete - Delete user config.json")
+
+	case "delete":
+		if configMng.ConfigFileExists(configJsonPath) {
+			if err := configMng.DeleteConfigFile(configJsonPath); err != nil {
+				fmt.Println("Error deleting config")
+				return
+
+			} else {
+				fmt.Println("Deleted successfully!")
+			}
+		} else {
+			fmt.Println("Config file does not exist")
+		}
+	}
 }
 
 func main() {
@@ -149,6 +199,13 @@ func main() {
 	}
 	exeDir := filepath.Dir(exePath)
 	configJsonPath = filepath.Join(exeDir, configName)
+
+	cli_arg := strings.Join(os.Args[1:], "")
+
+	if len(cli_arg) != 0 {
+		handleCLIArg(cli_arg)
+		return
+	}
 
 	if configMng.ConfigFileExists(configJsonPath) {
 		config, err = configMng.ReadConfig(configJsonPath)
