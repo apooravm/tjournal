@@ -197,6 +197,7 @@ func main() {
 		fmt.Println("Error locating exec file")
 		return
 	}
+
 	exeDir := filepath.Dir(exePath)
 	configJsonPath = filepath.Join(exeDir, configName)
 
