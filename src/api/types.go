@@ -1,16 +1,9 @@
 package api
 
-type UserAuth struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 type CreateJournalLogReq struct {
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	Log      string   `json:"log"`
-	Tags     []string `json:"tags"`
-	Title    string   `json:"title"`
+	Log   string   `json:"log"`
+	Tags  []string `json:"tags"`
+	Title string   `json:"title"`
 }
 
 type ReadJournalLogRes struct {
@@ -22,18 +15,14 @@ type ReadJournalLogRes struct {
 }
 
 type UpdateLogReq struct {
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	Log      string   `json:"log"`
-	Tags     []string `json:"tags"`
-	Title    string   `json:"title"`
-	Log_Id   int      `json:"log_id"`
+	Log    string   `json:"log"`
+	Tags   []string `json:"tags"`
+	Title  string   `json:"title"`
+	Log_Id int      `json:"log_id"`
 }
 
 type DeleteJournalLogReq struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Log_Id   int    `json:"log_id"`
+	Log_Id int `json:"log_id"`
 }
 
 type JournalMessage struct {

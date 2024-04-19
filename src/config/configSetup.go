@@ -3,29 +3,37 @@ package config
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 )
 
+// Converting to a global module var that can be assigned from configBusiness.go
+var (
+	ConfigPath string
+)
+
 type LocalConfig struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Token    string   `json:"token"`
+	Username string   `json:"username"`
+	Logs     []string `json:"logs"`
 }
 
-func ConfigFileExists(configpath string) bool {
-	if _, err := os.Stat(configpath); os.IsNotExist(err) {
+func ConfigFileExists() bool {
+	if _, err := os.Stat(ConfigPath); os.IsNotExist(err) {
 		return false
 	}
 	return true
 }
 
-func CreateConfigFile(configpath string, username string, password string) error {
+func CreateConfigFile(token string, username string) error {
 	configInit := LocalConfig{
+		Token:    token,
 		Username: username,
-		Password: password,
+		Logs:     make([]string, 0),
 	}
 
-	file, err := os.Create(configpath)
+	file, err := os.Create(ConfigPath)
 	if err != nil {
 		return err
 	}
@@ -45,10 +53,10 @@ func CreateConfigFile(configpath string, username string, password string) error
 	return nil
 }
 
-func ReadConfig(configpath string) (*LocalConfig, error) {
+func ReadConfig() (*LocalConfig, error) {
 	var localConfig LocalConfig
 
-	file, err := os.Open(configpath)
+	file, err := os.Open(ConfigPath)
 	if err != nil {
 		return &localConfig, err
 	}
@@ -62,23 +70,23 @@ func ReadConfig(configpath string) (*LocalConfig, error) {
 	return &localConfig, err
 }
 
-func DeleteConfigFile(configpath string) error {
-	if err := os.Remove(configpath); err != nil {
+func DeleteConfigFile() error {
+	if err := os.Remove(ConfigPath); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// Returns scanned username, password
+// Returns scanned email, password
 func ScanUsernamePassword() (string, string) {
-	var username string
+	var email string
 	var pass string
 
-	fmt.Println("Enter your registered username: ")
+	fmt.Println("Enter your registered email: ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
-		username = scanner.Text()
+		email = scanner.Text()
 	}
 
 	fmt.Println("Enter password: ")
@@ -87,5 +95,30 @@ func ScanUsernamePassword() (string, string) {
 		pass = scanner.Text()
 	}
 
-	return username, pass
+	return email, pass
+}
+
+func LogAppData(appLog string) error {
+	byteArr, err := os.ReadFile(ConfigPath)
+	if err != nil {
+		return errors.New("Error reading file" + err.Error())
+	}
+
+	var config LocalConfig
+	if err := json.Unmarshal(byteArr, &config); err != nil {
+		return fmt.Errorf("error unmarshaling config: %s", err.Error())
+	}
+
+	config.Logs = append(config.Logs, appLog)
+
+	updatedByteArr, err := json.Marshal(&config)
+	if err != nil {
+		return fmt.Errorf("error marshaling config: %s", err.Error())
+	}
+
+	if err := os.WriteFile(ConfigPath, updatedByteArr, os.ModePerm); err != nil {
+		return fmt.Errorf("error writing to file: %s", err.Error())
+	}
+
+	return nil
 }

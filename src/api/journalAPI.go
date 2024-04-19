@@ -17,10 +17,6 @@ func (e JournError) Error() string {
 	return fmt.Sprintf("Error %d: %s; %s", e.Code, e.Simple, e.Message)
 }
 
-const (
-	pingURL = "https://multi-serve.onrender.com/api/cronping"
-)
-
 type LogReqPayload struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -30,11 +26,11 @@ type LogReqPayload struct {
 type JournalDB struct {
 	Url      string
 	Username string
-	Password string
+	Token    string
 }
 
-func (journal *JournalDB) CheckServerStatus() (*JournalMessage, error) {
-	req, err := http.NewRequest("GET", pingURL, nil)
+func (journal *JournalDB) CheckServerStatus(pingUrl string) (*JournalMessage, error) {
+	req, err := http.NewRequest("GET", pingUrl, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -56,19 +52,7 @@ func (journal *JournalDB) CheckServerStatus() (*JournalMessage, error) {
 }
 
 func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
-	payload, err := json.Marshal(UserAuth{
-		Username: journal.Username,
-		Password: journal.Password,
-	})
-	if err != nil {
-		return nil, JournError{
-			Code:    400,
-			Message: err.Error(),
-			Simple:  "Error Marshalling",
-		}
-	}
-
-	req, err := http.NewRequest("GET", journal.Url, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("GET", journal.Url, nil)
 	if err != nil {
 		return nil, JournError{
 			Code:    400,
@@ -78,6 +62,7 @@ func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Auth", "Bearer "+journal.Token)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -107,12 +92,22 @@ func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 		return &journalLogs, nil
 
 	case res.StatusCode >= 400 && res.StatusCode < 500:
-		// Client Error
-		return nil, JournError{
-			Code:    400,
-			Message: res.Status,
-			Simple:  "Client error",
+		var errorRes ServerErrorRes
+		if err := json.NewDecoder(res.Body).Decode(&errorRes); err != nil {
+			return nil, ServerErrorRes{
+				Code:    400,
+				Message: res.Status,
+				Simple:  "Client error.",
+			}
 		}
+
+		return nil, errorRes
+		// Client Error
+		// return nil, JournError{
+		// 	Code:    400,
+		// 	Message: res.Status,
+		// 	Simple:  "Client error",
+		// }
 
 	case res.StatusCode >= 500 && res.StatusCode < 600:
 		// Server Error
@@ -133,11 +128,9 @@ func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 
 func (journal *JournalDB) CreateJournalLog(log string, title string, tags *[]string) (*JournalMessage, error) {
 	payload, err := json.Marshal(CreateJournalLogReq{
-		Username: journal.Username,
-		Password: journal.Password,
-		Log:      log,
-		Tags:     *tags,
-		Title:    title,
+		Log:   log,
+		Tags:  *tags,
+		Title: title,
 	})
 	if err != nil {
 		fmt.Println("Error creating data payload")
@@ -151,6 +144,7 @@ func (journal *JournalDB) CreateJournalLog(log string, title string, tags *[]str
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Auth", "Bearer "+journal.Token)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -161,11 +155,9 @@ func (journal *JournalDB) CreateJournalLog(log string, title string, tags *[]str
 
 	defer res.Body.Close()
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		fmt.Println("Log created!", res.Status)
 		return &JournalMessage{Message: res.Status, Code: res.StatusCode, Simple: "good"}, nil
 
 	} else {
-		fmt.Println("Something went wrong.", res.Status)
 		return &JournalMessage{Message: res.Status, Code: res.StatusCode, Simple: "bad"}, nil
 	}
 }
@@ -173,12 +165,10 @@ func (journal *JournalDB) CreateJournalLog(log string, title string, tags *[]str
 // Create a copy of the original log obj and edit that itself. This becomes the new log
 func (journal *JournalDB) UpdateJournalLog(prevLog *ReadJournalLogRes) (*JournalMessage, error) {
 	payload, err := json.Marshal(UpdateLogReq{
-		Username: journal.Username,
-		Password: journal.Password,
-		Log:      prevLog.Log,
-		Tags:     prevLog.Tags,
-		Title:    prevLog.Title,
-		Log_Id:   prevLog.Log_Id,
+		Log:    prevLog.Log,
+		Tags:   prevLog.Tags,
+		Title:  prevLog.Title,
+		Log_Id: prevLog.Log_Id,
 	})
 	if err != nil {
 		fmt.Println("Error marshalling payload")
@@ -192,6 +182,7 @@ func (journal *JournalDB) UpdateJournalLog(prevLog *ReadJournalLogRes) (*Journal
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Auth", "Bearer "+journal.Token)
 
 	client := http.Client{}
 	res, err := client.Do(req)
@@ -213,9 +204,7 @@ func (journal *JournalDB) UpdateJournalLog(prevLog *ReadJournalLogRes) (*Journal
 
 func (journal *JournalDB) DeleteJournalLog(log_id int) (*JournalMessage, error) {
 	payload, err := json.Marshal(DeleteJournalLogReq{
-		Username: journal.Username,
-		Password: journal.Password,
-		Log_Id:   log_id,
+		Log_Id: log_id,
 	})
 	if err != nil {
 		fmt.Println("Error marshalling payload")
@@ -229,6 +218,7 @@ func (journal *JournalDB) DeleteJournalLog(log_id int) (*JournalMessage, error) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Auth", "Bearer "+journal.Token)
 
 	client := http.Client{}
 	res, err := client.Do(req)
