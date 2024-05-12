@@ -62,7 +62,7 @@ func CreateConfigIfNotExist(configName string) {
 	}
 }
 
-func ConfigBusiness(configName string, loginEndpoint string, pingUrl string) *LocalConfig {
+func ConfigBusiness(configName string, loginEndpoint string) *LocalConfig {
 	exePath, err := os.Executable()
 	if err != nil {
 		LogColourPrint("Error locating exec file", "yellow")
@@ -84,7 +84,7 @@ func ConfigBusiness(configName string, loginEndpoint string, pingUrl string) *Lo
 	if ConfigFileExists() {
 		config, err := ReadConfig()
 		if err != nil {
-			fmt.Println("Error reading config file...")
+			LogColourPrint("Error reading config file.", err.Error())
 			return nil
 		}
 		return config
@@ -95,7 +95,7 @@ func ConfigBusiness(configName string, loginEndpoint string, pingUrl string) *Lo
 		if err != nil {
 			serverErr, ok := err.(api.ServerErrorRes)
 			if ok {
-				LogColourPrint(fmt.Sprintf("%d %s %s", serverErr.Code, serverErr.Message, serverErr.Simple), "yellow")
+				LogColourPrint(fmt.Sprintf("%d %s %s", serverErr.Code, serverErr.Message, serverErr.Simple), "red")
 			}
 			return nil
 		}

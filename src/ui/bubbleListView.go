@@ -16,11 +16,9 @@ import (
 var (
 	journalManage api.JournalDB
 	docStyle      = lipgloss.NewStyle().Margin(1, 2)
-	PingUrl       string
 )
 
-func InitRun(pingUrl string, journManage api.JournalDB) error {
-	PingUrl = pingUrl
+func InitRun(journManage api.JournalDB) error {
 	journalManage = journManage
 
 	p := tea.NewProgram(InitialModel())
@@ -57,12 +55,10 @@ func getItemList(logs *[]api.ReadJournalLogRes) *[]list.Item {
 }
 
 func GetData() tea.Msg {
-	status, err := api.CheckServerStatus(PingUrl)
-	if err != nil {
-		return api.JournError{Code: 400, Message: "Error connecting to the server" + err.Error()}
-	}
-
-	fmt.Println(status)
+	// status, err := api.CheckServerStatus(PingUrl)
+	// if err != nil {
+	// 	return api.JournError{Code: 400, Message: "Error connecting to the server" + err.Error()}
+	// }
 
 	logs, err := journalManage.ReadJournalLogs()
 	if err != nil {

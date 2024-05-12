@@ -7,18 +7,26 @@ import (
 )
 
 var (
-	configName    = "tjournalConfig.json"
-	URL           = "http://localhost:4000/api/journal/"
-	PingUrl       = "http://localhost:4000/api/ping"
-	PingUrl2       = "https://multi-serve.onrender.com/api/ping"
-	loginEndpoint = "http://localhost:4000/api/user/login"
+	configName = "tjournalConfig.json"
+	base       = "https://multi-serve.onrender"
+	PingRoute  = "/api/ping"
+	JournRoute = "/api/journal/"
+	LoginRoute = "/api/user/login"
 )
 
 func main() {
 	// ConfigBusiness
+	if true {
+		base = "http://localhost:4000"
+	}
 
-	// Check if server online
-	status, err := api.CheckServerStatus(PingUrl)
+	// Check internet and server status
+	if connStatus := api.UserIsConnected(); !connStatus {
+		configMng.LogColourPrint("No internet", "red")
+		return
+	}
+
+	status, err := api.CheckServerStatus(base + PingRoute)
 	if err != nil {
 		configMng.LogColourPrint(err.Error(), "yellow")
 		return
@@ -29,11 +37,11 @@ func main() {
 		return
 	}
 
-	config := configMng.ConfigBusiness(configName, loginEndpoint, PingUrl)
-	journalManage := api.JournalDB{Url: URL, Username: config.Username, Token: config.Token}
-
+	// If any error, prints it and throws nil
+	config := configMng.ConfigBusiness(configName, base+LoginRoute)
 	if config != nil {
-		if err := ui.InitRun(PingUrl, journalManage); err != nil {
+		journalManage := api.JournalDB{Url: base + JournRoute, Username: config.Username, Token: config.Token}
+		if err := ui.InitRun(journalManage); err != nil {
 			configMng.LogColourPrint(err.Error(), "red")
 			return
 		}
