@@ -56,7 +56,13 @@ func LogColourPrint(message string, colour string) {
 	}
 }
 
-func ConfigBusiness(configName string, loginEndpoint string) *LocalConfig {
+func CreateConfigIfNotExist(configName string) {
+	if ConfigFileExists() {
+
+	}
+}
+
+func ConfigBusiness(configName string, loginEndpoint string, pingUrl string) *LocalConfig {
 	exePath, err := os.Executable()
 	if err != nil {
 		LogColourPrint("Error locating exec file", "yellow")

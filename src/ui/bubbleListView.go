@@ -57,18 +57,12 @@ func getItemList(logs *[]api.ReadJournalLogRes) *[]list.Item {
 }
 
 func GetData() tea.Msg {
-	status, err := journalManage.CheckServerStatus(PingUrl)
+	status, err := api.CheckServerStatus(PingUrl)
 	if err != nil {
-		serverErr, ok := err.(api.ServerErrorRes)
-		if ok {
-			log.Printf("%d %s %s", serverErr.Code, serverErr.Message, serverErr.Simple)
-		}
 		return api.JournError{Code: 400, Message: "Error connecting to the server" + err.Error()}
 	}
 
-	if status.Simple == "bad" {
-		return api.JournError{Code: 500, Message: "Server Offline"}
-	}
+	fmt.Println(status)
 
 	logs, err := journalManage.ReadJournalLogs()
 	if err != nil {

@@ -29,28 +29,6 @@ type JournalDB struct {
 	Token    string
 }
 
-func (journal *JournalDB) CheckServerStatus(pingUrl string) (*JournalMessage, error) {
-	req, err := http.NewRequest("GET", pingUrl, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		return &JournalMessage{Message: "Server Online", Code: res.StatusCode, Simple: "good"}, nil
-
-	} else {
-		return &JournalMessage{Message: "Server Offline", Code: res.StatusCode, Simple: "bad"}, nil
-	}
-}
-
 func (journal *JournalDB) ReadJournalLogs() (*[]ReadJournalLogRes, error) {
 	req, err := http.NewRequest("GET", journal.Url, nil)
 	if err != nil {
