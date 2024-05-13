@@ -1,8 +1,7 @@
 package ui
 
 import (
-	"fmt"
-	"log"
+	"strings"
 
 	api "github.com/apooravm/tjournal/src/api"
 
@@ -13,54 +12,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	journalManage api.JournalDB
-	docStyle      = lipgloss.NewStyle().Margin(1, 2)
-)
-
-func InitRun(journManage api.JournalDB) error {
-	journalManage = journManage
-
-	p := tea.NewProgram(InitialModel())
-	if _, err := p.Run(); err != nil {
-		log.Fatal(err)
-		return err
-	} else {
-		return nil
-	}
-}
-
-type item struct {
-	title, desc string
-}
-
-type JournMessage tea.Msg
-
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.desc }
-
-func timeStrParser(timestr string) string {
-	// 2024-02-04T16:17:54.361333+00:00
-	y, m, d, time := timestr[0:4], timestr[5:7], timestr[8:10], timestr[11:16]
-	return fmt.Sprintf("\n\n%s, %s-%s-%s", time, d, m, y)
-}
-
-func getItemList(logs *[]api.ReadJournalLogRes) *[]list.Item {
-	var items []list.Item
-	for _, log := range *logs {
-		items = append(items, item{title: log.Title, desc: log.Log + timeStrParser(log.Created_at)})
-	}
-	return &items
-}
-
 func GetData() tea.Msg {
 	// status, err := api.CheckServerStatus(PingUrl)
 	// if err != nil {
 	// 	return api.JournError{Code: 400, Message: "Error connecting to the server" + err.Error()}
 	// }
 
-	logs, err := journalManage.ReadJournalLogs()
+	logs, err := JournalManage.ReadJournalLogs()
 	if err != nil {
 		serverErr, ok := err.(api.ServerErrorRes)
 		if !ok {
@@ -71,6 +29,24 @@ func GetData() tea.Msg {
 
 	return logs
 }
+
+func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
+	border := lipgloss.RoundedBorder()
+	border.BottomLeft = left
+	border.Bottom = middle
+	border.BottomRight = right
+	return border
+}
+
+var (
+	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
+	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
+	docStyleTabs      = lipgloss.NewStyle().Padding(1, 2, 1, 2)
+	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
+	activeTabStyle    = inactiveTabStyle.Copy().Border(activeTabBorder, true)
+	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+)
 
 type model struct {
 	statusCode int
@@ -83,6 +59,10 @@ type model struct {
 
 	quitting bool
 	err      error
+
+	tabs         []string
+	tabContent   []string
+	activeTabIdx int
 }
 
 func InitialModel() model {
@@ -102,11 +82,16 @@ func InitialModel() model {
 	// m.list.SetShowHelp(false)
 	m.filterAgainst = "title"
 
+	m.tabs = []string{"Read Logs", "Create Log"}
+	m.tabContent = []string{"", ""}
+	m.activeTabIdx = 0
+
 	m.inputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7"))
 	return m
 }
 
 func (m model) Init() tea.Cmd {
+	m.tabContent[0] = m.JournalLogReadView()
 	return tea.Batch(GetData, func() tea.Msg {
 		var msg JournMessage = "startspinner"
 		return msg
@@ -116,9 +101,16 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			m.quitting = true
+		switch msg.String() {
+		case "ctrl+c", "q":
 			return m, tea.Quit
+
+		case "right", "l", "n", "tab":
+			m.activeTabIdx = min(m.activeTabIdx+1, len(m.tabs)-1)
+			return m, nil
+		case "left", "h", "p", "shift+tab":
+			m.activeTabIdx = max(m.activeTabIdx-1, 0)
+			return m, nil
 		}
 
 	case api.JournError:
@@ -152,12 +144,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.tabContent[0] = m.JournalLogReadView()
 	var listCmd tea.Cmd
 	m.list, listCmd = m.list.Update(msg)
 	return m, listCmd
 }
 
-func (m model) View() string {
+func (m model) JournalLogReadView() string {
 	question := lipgloss.NewStyle().Width(50).Align(lipgloss.Center).Render("Are you sure you want to eat marmalade?")
 
 	if m.err != nil {
@@ -169,4 +162,39 @@ func (m model) View() string {
 	}
 
 	return docStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, m.list.View(), question))
+}
+
+func (m model) View() string {
+	doc := strings.Builder{}
+
+	var renderedTabs []string
+
+	for i, t := range m.tabs {
+		var style lipgloss.Style
+		isFirst, isLast, isActive := i == 0, i == len(m.tabs)-1, i == m.activeTabIdx
+		if isActive {
+			style = activeTabStyle.Copy()
+		} else {
+			style = inactiveTabStyle.Copy()
+		}
+		border, _, _, _, _ := style.GetBorder()
+		if isFirst && isActive {
+			border.BottomLeft = "│"
+		} else if isFirst && !isActive {
+			border.BottomLeft = "├"
+		} else if isLast && isActive {
+			border.BottomRight = "│"
+		} else if isLast && !isActive {
+			border.BottomRight = "┤"
+		}
+		style = style.Border(border)
+		renderedTabs = append(renderedTabs, style.Render(t))
+	}
+
+	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
+	doc.WriteString(row)
+	doc.WriteString("\n")
+	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(m.tabContent[m.activeTabIdx]))
+	return docStyleTabs.Render(doc.String())
+
 }

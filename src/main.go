@@ -33,7 +33,7 @@ func main() {
 	}
 
 	if !status {
-		configMng.LogColourPrint("Offline", "red")
+		configMng.LogColourPrint("Server Offline", "red")
 		return
 	}
 
