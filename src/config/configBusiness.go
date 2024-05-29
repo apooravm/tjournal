@@ -3,9 +3,6 @@ package config
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/apooravm/tjournal/src/api"
 )
@@ -63,24 +60,6 @@ func CreateConfigIfNotExist(configName string) {
 }
 
 func ConfigBusiness(configName string, loginEndpoint string) *LocalConfig {
-	exePath, err := os.Executable()
-	if err != nil {
-		LogColourPrint("Error locating exec file", "yellow")
-		return nil
-	}
-
-	exeDir := filepath.Dir(exePath)
-	configJsonPath := filepath.Join(exeDir, configName)
-
-	cli_arg := strings.Join(os.Args[1:], "")
-
-	if len(cli_arg) != 0 {
-		handleCLIArg(cli_arg)
-		return nil
-	}
-
-	ConfigPath = configJsonPath
-
 	if ConfigFileExists() {
 		config, err := ReadConfig()
 		if err != nil {
