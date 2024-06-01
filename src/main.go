@@ -20,38 +20,45 @@ var (
 	// App states: "quick_save", "quick_view", "tui_view", "tui_save"
 	AppState      = ""
 	NewLogMessage = ""
+	// Some cli args need the main func to return immediately. Toggle this flag for that.
+	return_flag = false
 )
 
 func handleCLIArg(cliArg []string) {
 	switch cliArg[0] {
-	case "help":
-		fmt.Println("Usage: `tjournal.exe [ARG]` if arg needed\n\nAvailable Args\nhelp   - Display help\ndelete - Delete user config.json")
-		return
+	case "-help":
+		fmt.Println(`Usage: 'tjournal.exe [ARG]' if arg needed
+\n
+\nAvailable Args
+\nnew    - New Log. Usage: 'tjournal.exe -new <YOUR_LOG>. Note: The tags and title are defaulted to 'Quick Note' and 'quick'.
+\ndelete - Delete user config.json
+\nhelp   - Display help`)
+		return_flag = true
 
-	case "new":
+	case "-new":
 		NewLogMessage = strings.Join(cliArg[1:], " ")
 		AppState = "quick_save"
 
-	case "recent":
+	case "-recent":
 		AppState = "quick_view"
 
-	case "delete":
+	case "-delete":
 		if configMng.ConfigFileExists() {
 			if err := configMng.DeleteConfigFile(); err != nil {
-				configMng.LogColourPrint("Error deleting config", "red")
+				configMng.LogColourPrint("\nError deleting config\n", "red")
 
 			} else {
-				configMng.LogColourPrint("Deleted successfully!", "green")
+				configMng.LogColourPrint("\nConfig deleted successfully!\n", "green")
 
 			}
 		} else {
-			configMng.LogColourPrint("Config file does not exist", "yellow")
+			configMng.LogColourPrint("\nConfig file does not exist\n", "yellow")
 
 		}
-		return
+		return_flag = true
 
 	default:
-		AppState = "tui_view"
+		configMng.LogColourPrint("\nTry tjournal.exe -help\n", "cyan")
 	}
 
 }
@@ -75,6 +82,9 @@ func main() {
 
 	if len(os.Args) > 1 {
 		handleCLIArg(os.Args[1:])
+		if return_flag {
+			return
+		}
 
 	} else {
 		AppState = "tui_view"
@@ -98,9 +108,13 @@ func main() {
 	}
 
 	// If any error, prints it and throws nil
-	config := configMng.ConfigBusiness(configName, base+LoginRoute)
-	journalManage := api.JournalDB{Url: base + JournRoute, Username: config.Username, Token: config.Token}
+	config, err := configMng.ConfigBusiness(configName, base+LoginRoute)
+	if err != nil {
+		configMng.LogColourPrint(err.Error(), "red")
+		return
+	}
 
+	journalManage := api.JournalDB{Url: base + JournRoute, Username: config.Username, Token: config.Token}
 	switch AppState {
 	case "quick_view":
 		fmt.Println("Quick View")
@@ -124,14 +138,14 @@ func main() {
 		if NewLogMessage != "" {
 			journMsg, err := journalManage.CreateJournalLog(NewLogMessage, "Quick Log", &[]string{"quick"})
 			if err != nil {
-				configMng.LogColourPrint("Error saving log", "red")
+				configMng.LogColourPrint("Error creating log\n", "red")
 			}
 			if journMsg.Code != 201 {
-				configMng.LogColourPrint(journMsg.Message, "red")
+				configMng.LogColourPrint(journMsg.Message+"\n", "red")
 				return
 
 			} else {
-				configMng.LogColourPrint("All good pardner 🤠", "green")
+				configMng.LogColourPrint("All good pardner 🤠\n", "green")
 			}
 		}
 

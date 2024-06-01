@@ -28,29 +28,33 @@ func handleCLIArg(cliArg string) {
 }
 
 // Print colored error text
-func LogColourPrint(message string, colour string) {
+func LogColourSprintf(message string, colour string) string {
 	switch colour {
 	case "red":
-		log.Printf("\x1b[31m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[31m%s\x1b[0m", message)
 
 	case "yellow":
-		log.Printf("\x1b[33m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[33m%s\x1b[0m", message)
 
 	case "green":
-		log.Printf("\x1b[32m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[32m%s\x1b[0m", message)
 
 	case "magenta":
-		log.Printf("\x1b[35m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[35m%s\x1b[0m", message)
 
 	case "cyan":
-		log.Printf("\x1b[36m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[36m%s\x1b[0m", message)
 
 	case "blue":
-		log.Printf("\x1b[34m%s\x1b[0m", message)
+		return fmt.Sprintf("\x1b[34m%s\x1b[0m", message)
 
 	default:
-		log.Printf("%s", message)
+		return fmt.Sprintf("%s", message)
 	}
+}
+
+func LogColourPrint(message string, colour string) {
+	log.Println(LogColourSprintf(message, colour))
 }
 
 func CreateConfigIfNotExist(configName string) {
@@ -59,37 +63,33 @@ func CreateConfigIfNotExist(configName string) {
 	}
 }
 
-func ConfigBusiness(configName string, loginEndpoint string) *LocalConfig {
+func ConfigBusiness(configName string, loginEndpoint string) (*LocalConfig, error) {
 	if ConfigFileExists() {
 		config, err := ReadConfig()
 		if err != nil {
-			LogColourPrint("Error reading config file.", err.Error())
-			return nil
+			return nil, fmt.Errorf("%s\n", "Error reading config file. "+err.Error())
 		}
-		return config
+		return config, nil
 
 	} else {
 		email, password := ScanUsernamePassword()
 		token, err := api.LoginUser(loginEndpoint, email, password)
+
 		if err != nil {
-			serverErr, ok := err.(api.ServerErrorRes)
-			if ok {
-				LogColourPrint(fmt.Sprintf("%d %s %s", serverErr.Code, serverErr.Message, serverErr.Simple), "red")
-			}
-			return nil
+			// Already know its going to be of type ServerErrorRes thus dont need to check with ok.
+			serverErr, _ := err.(api.ServerErrorRes)
+			return nil, fmt.Errorf("%s\n", fmt.Sprintf("%d %s %s", serverErr.Code, serverErr.Message, serverErr.Simple))
 		}
 
 		if err := CreateConfigFile(token.Token, token.Username); err != nil {
-			fmt.Println("Error creating config...")
-			return nil
+			return nil, fmt.Errorf("%s\n", "Error creating config...")
 		}
 
 		config, err := ReadConfig()
 		if err != nil {
-			fmt.Println("Error reading config file...")
-			return nil
+			return nil, fmt.Errorf("%s\n", "Error readinf config file...")
 		}
 
-		return config
+		return config, nil
 	}
 }
